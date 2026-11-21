@@ -240,7 +240,7 @@ func TestAnAPKIsListedInASignedIndex(t *testing.T) {
 		t.Fatalf("read %+v", p)
 	}
 
-	if got := f.Paths(p); !slices.Equal(got, []string{"x86_64/demo-1.0-r0.apk", "aarch64/demo-1.0-r0.apk"}) {
+	if got := f.Paths(p); !slices.Equal(got, []string{"x86_64/demo-1.0-r0.apk", "aarch64/demo-1.0-r0.apk", "noarch/demo-1.0-r0.apk"}) {
 		t.Fatalf("served at %v", got)
 	}
 

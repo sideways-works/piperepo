@@ -166,12 +166,18 @@ func (a *apk) Parse(file string, r io.ReaderAt, size int64) (*meta.Package, erro
 }
 
 // Paths are where apk fetches a package: its name and version, whatever
-// it was uploaded as.
+// it was uploaded as, under each architecture's index. apk-tools 3 fetches
+// a noarch package from noarch/, older ones from the index's directory.
 func (a *apk) Paths(p *meta.Package) []string {
-	var out []string
+	file := p.Name + "-" + p.Version + ".apk"
+	out := make([]string, 0, len(a.o.Archs)+1)
 
 	for _, ar := range archsOf(p.Arch, a.o.Archs, "noarch") {
-		out = append(out, path.Join(ar, p.Name+"-"+p.Version+".apk"))
+		out = append(out, path.Join(ar, file))
+	}
+
+	if p.Arch == "noarch" {
+		out = append(out, path.Join("noarch", file))
 	}
 
 	return out

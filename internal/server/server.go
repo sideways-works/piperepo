@@ -210,6 +210,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case errors.Is(err, store.ErrNotFound), errors.Is(err, repo.ErrNoIndex):
+		s.Log.Info("not found", "path", r.URL.Path)
 		problem(w, http.StatusNotFound, "no "+r.URL.Path+" here")
 
 		return
