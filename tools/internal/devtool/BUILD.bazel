@@ -1,0 +1,11 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "devtool",
+    srcs = [
+        "devtool.go",
+        "env.go",
+    ],
+    importpath = "github.com/sideways-works/piperepo/tools/internal/devtool",
+    visibility = ["//tools:__subpackages__"],
+)

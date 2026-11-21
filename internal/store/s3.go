@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 )
 
@@ -56,17 +55,9 @@ func NewS3(c S3Config) *S3 {
 }
 
 func notFound(err error) bool {
-	if _, ok := errors.AsType[*types.NoSuchKey](err); ok {
-		return true
-	}
+	api, ok := errors.AsType[smithy.APIError](err)
 
-	if _, ok := errors.AsType[*types.NotFound](err); ok {
-		return true
-	}
-
-	var api smithy.APIError
-
-	return errors.As(err, &api) && (api.ErrorCode() == "NotFound" || api.ErrorCode() == "NoSuchKey")
+	return ok && (api.ErrorCode() == "NotFound" || api.ErrorCode() == "NoSuchKey")
 }
 
 func (s *S3) Get(ctx context.Context, key string) (io.ReadCloser, Info, error) {

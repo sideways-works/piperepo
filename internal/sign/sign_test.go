@@ -29,8 +29,15 @@ func TestOneSeedMakesOneOpenPGPKey(t *testing.T) {
 		t.Fatalf("one seed made %s and %s", a.Fingerprint(), b.Fingerprint())
 	}
 
-	ka, _ := a.PublicArmored()
-	kb, _ := b.PublicArmored()
+	ka, err := a.PublicArmored()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kb, err := b.PublicArmored()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if !bytes.Equal(ka, kb) {
 		t.Fatal("one seed's public keys differ")

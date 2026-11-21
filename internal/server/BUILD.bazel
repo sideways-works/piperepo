@@ -1,0 +1,28 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "server",
+    srcs = ["server.go"],
+    importpath = "github.com/sideways-works/piperepo/internal/server",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/format",
+        "//internal/meta",
+        "//internal/repo",
+        "//internal/store",
+    ],
+)
+
+go_test(
+    name = "server_test",
+    srcs = ["server_test.go"],
+    embed = [":server"],
+    deps = [
+        "//internal/format",
+        "//internal/meta",
+        "//internal/repo",
+        "//internal/sign",
+        "//internal/store",
+        "//internal/testpkg",
+    ],
+)

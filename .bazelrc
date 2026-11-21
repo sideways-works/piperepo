@@ -1,0 +1,7 @@
+# No bazel-* links in the checkout.
+common --experimental_convenience_symlinks=ignore
+# The server leaves the shared machine's memory soon after the last command.
+startup --max_idle_secs=300
+# No cgo: the binary is static and needs no C toolchain.
+build --@rules_go//go/config:pure
+test --test_output=errors

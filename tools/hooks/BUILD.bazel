@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "hooks_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/sideways-works/piperepo/tools/hooks",
+    visibility = ["//visibility:private"],
+    deps = ["//tools/internal/devtool"],
+)
+
+go_binary(
+    name = "hooks",
+    embed = [":hooks_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "hooks_test",
+    srcs = ["main_test.go"],
+    embed = [":hooks_lib"],
+)

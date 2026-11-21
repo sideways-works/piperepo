@@ -1,0 +1,27 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "repo",
+    srcs = ["repo.go"],
+    importpath = "github.com/sideways-works/piperepo/internal/repo",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/format",
+        "//internal/meta",
+        "//internal/store",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "repo_test",
+    srcs = ["repo_test.go"],
+    embed = [":repo"],
+    deps = [
+        "//internal/format",
+        "//internal/meta",
+        "//internal/sign",
+        "//internal/store",
+        "//internal/testpkg",
+    ],
+)

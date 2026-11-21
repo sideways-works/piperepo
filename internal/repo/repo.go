@@ -46,6 +46,7 @@ const (
 
 // Errors an upload or a delete answers.
 var (
+	errNotYet   = errors.New("repo: not in the index yet; the next reconcile lists it")
 	errChanging = errors.New("repo: the bucket kept changing while the index was built; the next reconcile publishes it")
 	ErrConflict = errors.New("another file of that name is there")
 	ErrTooLarge = errors.New("too large")
@@ -150,13 +151,13 @@ func (r *Repo) hashed(body io.Reader) (*os.File, *meta.Package, error) {
 
 	n, err := io.Copy(io.MultiWriter(f, s256, s1, m5), src)
 	if err != nil {
-		_ = f.Close()
+		_ = f.Close() //nolint:errcheck // a temporary file, gone when closed
 
 		return nil, nil, fmt.Errorf("repo: %w", err)
 	}
 
 	if r.MaxSize > 0 && n > r.MaxSize {
-		_ = f.Close()
+		_ = f.Close() //nolint:errcheck // a temporary file, gone when closed
 
 		return nil, nil, fmt.Errorf("%w: at most %d bytes", ErrTooLarge, r.MaxSize)
 	}
@@ -193,7 +194,7 @@ func (r *Repo) Upload(ctx context.Context, file string, body io.Reader) (*meta.P
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck // a temporary file, gone when closed
 
 	p, err := r.read(file, f, sums)
 	if err != nil {
@@ -272,7 +273,7 @@ func (r *Repo) until(ctx context.Context, p *meta.Package) error {
 		}
 	}
 
-	return fmt.Errorf("repo: %s isn't in the index yet; the next reconcile lists it", p.File)
+	return fmt.Errorf("%w: %s", errNotYet, p.File)
 }
 
 // Delete takes a package out and publishes an index without it.
@@ -336,7 +337,7 @@ func (r *Repo) remake(ctx context.Context, info store.Info, file string) (*meta.
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck // a temporary file, gone when closed
 
 	p, err := r.read(file, f, sums)
 	if err != nil {
@@ -498,7 +499,7 @@ func (r *Repo) publish(ctx context.Context, pkgs []*meta.Package, digest string)
 			t.Packages[path] = Object{File: p.File, Size: p.Size, SHA256: p.SHA256}
 		}
 
-		t.Entries = append(t.Entries, meta.EntryOf(p, paths[0], false))
+		t.Entries = append(t.Entries, meta.EntryOf(p, paths[0]))
 	}
 
 	sort.Slice(t.Entries, func(i, j int) bool {

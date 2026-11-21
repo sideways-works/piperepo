@@ -36,20 +36,22 @@ const (
 	imageFedora    = "docker.io/library/fedora@sha256:a7d72ba2745b100a3351087472e5ee7b2450af7cf331e7673007e3817612839c"
 )
 
-const token = "a-test-stores-credential"
+const token = "a-test-stores-credential" //nolint:gosec // a test's own
 
 // freePort is a port nothing listens on now.
 func freePort(t *testing.T) int {
 	t.Helper()
 
 	for {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
+		l, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		port := l.Addr().(*net.TCPAddr).Port //nolint:forcetypeassert,errcheck // a TCP listener
-		_ = l.Close()
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
 
 		// Another project's ports.
 		if port < 7100 || port > 7199 {
@@ -133,6 +135,7 @@ func binary(t *testing.T) string {
 
 	out := filepath.Join(t.TempDir(), "piperepo")
 	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", out, "../../cmd/piperepo") //nolint:gosec // the module's own command
+
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 
 	if b, err := cmd.CombinedOutput(); err != nil {
@@ -151,8 +154,8 @@ type store struct {
 	endpoint string
 }
 
-// serve runs n instances of format on one fresh bucket.
-func serve(t *testing.T, format string, n int) *store {
+// serve runs two instances of format on one fresh bucket.
+func serve(t *testing.T, format string) *store {
 	t.Helper()
 
 	endpoint := bucket(t, "piperepo-"+format)
@@ -166,7 +169,7 @@ func serve(t *testing.T, format string, n int) *store {
 
 	s := &store{format: format, dir: dir, bin: binary(t), endpoint: endpoint}
 
-	for range n {
+	for range 2 {
 		s.start(t, nil)
 	}
 
@@ -193,6 +196,7 @@ func (s *store) start(t *testing.T, env []string) (string, *exec.Cmd) {
 
 	cmd := exec.Command(s.bin, "serve", "--format", s.format, "--config", conf) //nolint:gosec,noctx // the test's own build; it outlives no test
 	cmd.Stdout, cmd.Stderr = logf, logf
+
 	cmd.Env = append(os.Environ(), env...)
 
 	if err := cmd.Start(); err != nil {
@@ -200,12 +204,12 @@ func (s *store) start(t *testing.T, env []string) (string, *exec.Cmd) {
 	}
 
 	t.Cleanup(func() {
-		_ = cmd.Process.Kill() //nolint:errcheck // it may have ended
-		_, _ = cmd.Process.Wait()
-		_ = logf.Close()
+		_ = cmd.Process.Kill()    //nolint:errcheck // it may have ended
+		_, _ = cmd.Process.Wait() //nolint:errcheck // killed
+		_ = logf.Close()          //nolint:errcheck // written by the instance alone
 
 		if t.Failed() {
-			b, _ := os.ReadFile(logf.Name())
+			b, _ := os.ReadFile(logf.Name()) //nolint:errcheck // for a failure's log
 			t.Logf("instance %d's log:\n%s", port, b)
 		}
 	})
@@ -248,7 +252,10 @@ func request(t *testing.T, method, url string, body io.Reader) (int, string) {
 	}
 	defer resp.Body.Close()
 
-	b, _ := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	return resp.StatusCode, string(b)
 }
@@ -257,11 +264,11 @@ func request(t *testing.T, method, url string, body io.Reader) (int, string) {
 func upload(t *testing.T, url, dir, file string) {
 	t.Helper()
 
-	f, err := os.Open(filepath.Join(dir, file))
+	f, err := os.Open(filepath.Join(dir, file)) //nolint:gosec // a file the test built
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck // read only
 
 	if code, body := request(t, http.MethodPut, url+"/upload/"+file, f); code != http.StatusCreated {
 		t.Fatalf("uploading %s: %d %s", file, code, body)
@@ -292,6 +299,19 @@ func workdir(t *testing.T) string {
 	}
 
 	return dir
+}
+
+// listed wants the API to give demo's version with the file its build
+// put in it.
+func listed(t *testing.T, url, version string) {
+	t.Helper()
+
+	const name = "demo"
+
+	code, body := request(t, http.MethodGet, url+"/api/packages/"+name+"/"+version, nil)
+	if code != http.StatusOK || !strings.Contains(body, `"path":"/usr/share/`+name+`/who"`) || !strings.Contains(body, `"name":"`+name+`"`) {
+		t.Fatalf("%s %s: %d %s", name, version, code, body)
+	}
 }
 
 // otherKey writes another store's public key into dir as other.asc.

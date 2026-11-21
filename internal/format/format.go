@@ -58,8 +58,19 @@ type Signer struct {
 	RSA *sign.RSA
 }
 
+// The formats there are.
+const (
+	Apt  = "apt"
+	Arch = "arch"
+	APK  = "apk"
+	RPM  = "rpm"
+)
+
 // Names are the formats there are.
-var Names = []string{"apt", "arch", "apk", "rpm"}
+var Names = []string{Apt, Arch, APK, RPM}
+
+// keyFile is where an OpenPGP format serves its public key.
+const keyFile = "key.asc"
 
 // ErrFormat is a package or a name a format refuses.
 var ErrFormat = errors.New("format")
@@ -71,25 +82,25 @@ func New(name string, o Options, s Signer) (Format, error) {
 	}
 
 	switch name {
-	case "apt":
+	case Apt:
 		if s.PGP == nil {
 			return nil, fmt.Errorf("%w: apt signs with an OpenPGP key", ErrFormat)
 		}
 
 		return newDeb(o, s.PGP), nil
-	case "arch":
+	case Arch:
 		if s.PGP == nil {
 			return nil, fmt.Errorf("%w: arch signs with an OpenPGP key", ErrFormat)
 		}
 
 		return newArch(o, s.PGP), nil
-	case "apk":
+	case APK:
 		if s.RSA == nil {
 			return nil, fmt.Errorf("%w: apk signs with an RSA key", ErrFormat)
 		}
 
 		return newAPK(o, s.RSA), nil
-	case "rpm":
+	case RPM:
 		if s.PGP == nil {
 			return nil, fmt.Errorf("%w: rpm signs with an OpenPGP key", ErrFormat)
 		}
@@ -101,7 +112,7 @@ func New(name string, o Options, s Signer) (Format, error) {
 }
 
 // OpenPGP is whether a format signs with an OpenPGP key, else an RSA one.
-func OpenPGP(name string) bool { return name != "apk" }
+func OpenPGP(name string) bool { return name != APK }
 
 func archsOr(given, def []string) []string {
 	if len(given) > 0 {

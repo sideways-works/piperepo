@@ -1,0 +1,33 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "format",
+    srcs = [
+        "apk.go",
+        "arch.go",
+        "deb.go",
+        "format.go",
+        "rpm.go",
+    ],
+    importpath = "github.com/sideways-works/piperepo/internal/format",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/meta",
+        "//internal/sign",
+        "@com_github_klauspost_compress//zstd",
+        "@com_github_ulikunitz_xz//:xz",
+    ],
+)
+
+go_test(
+    name = "format_test",
+    srcs = ["format_test.go"],
+    embed = [":format"],
+    deps = [
+        "//internal/meta",
+        "//internal/sign",
+        "//internal/testpkg",
+        "@com_github_protonmail_go_crypto//openpgp",
+        "@com_github_protonmail_go_crypto//openpgp/clearsign",
+    ],
+)

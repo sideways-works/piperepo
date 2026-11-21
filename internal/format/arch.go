@@ -30,7 +30,7 @@ func newArch(o Options, pgp *sign.OpenPGP) *arch {
 	return &arch{o: o, pgp: pgp}
 }
 
-func (a *arch) Name() string { return "arch" }
+func (a *arch) Name() string { return Arch }
 
 var archSuffixes = []string{".pkg.tar.zst", ".pkg.tar.xz", ".pkg.tar.gz"}
 
@@ -124,9 +124,10 @@ func parseKeyValues(s string) []meta.Field {
 }
 
 func (a *arch) Paths(p *meta.Package) []string {
-	var out []string
+	archs := archsOf(p.Arch, a.o.Archs, "any")
+	out := make([]string, 0, len(archs))
 
-	for _, ar := range archsOf(p.Arch, a.o.Archs, "any") {
+	for _, ar := range archs {
 		out = append(out, path.Join(ar, p.File))
 	}
 
@@ -139,7 +140,7 @@ func (a *arch) Keys() (map[string][]byte, error) {
 		return nil, err
 	}
 
-	return map[string][]byte{"key.asc": k}, nil
+	return map[string][]byte{keyFile: k}, nil
 }
 
 func (a *arch) Immutable(string) bool { return false }

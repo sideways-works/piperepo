@@ -213,10 +213,10 @@ func tarFiles(t *testing.T, data []byte) map[string]string {
 	out := map[string]string{}
 
 	err = walkTar(z, func(h *tar.Header, body io.Reader) error {
-		b, _ := io.ReadAll(body)
+		b, err := io.ReadAll(body)
 		out[h.Name] = string(b)
 
-		return nil
+		return err //nolint:wrapcheck // a test's read
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -268,15 +268,18 @@ func TestAnAPKIsListedInASignedIndex(t *testing.T) {
 			t.Fatalf("signature named %s", h.Name)
 		}
 
-		sig, _ = io.ReadAll(body)
+		sig, err = io.ReadAll(body)
 
-		return nil
+		return err //nolint:wrapcheck // a test's read
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, _ = io.Copy(io.Discard, z)
+	if _, err := io.Copy(io.Discard, io.LimitReader(z, 1<<20)); err != nil {
+		t.Fatal(err)
+	}
+
 	signed := idx[len(idx)-br.Len():]
 
 	sum := sha256.Sum256(signed)
@@ -342,7 +345,11 @@ func TestAnRPMIsListedInSignedRepodata(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		primary, _ := io.ReadAll(z)
+		primary, err := io.ReadAll(z)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		if !strings.Contains(string(primary), `<location href="packages/demo-1.0-1.noarch.rpm"/>`) || strings.Contains(string(primary), "rpmlib(") {
 			t.Fatalf("primary: %s", primary)
 		}

@@ -36,7 +36,7 @@ func newAPK(o Options, r *sign.RSA) *apk {
 	return &apk{o: o, rsa: r}
 }
 
-func (a *apk) Name() string { return "apk" }
+func (a *apk) Name() string { return APK }
 
 func (a *apk) Accept(file string) error {
 	if !strings.HasSuffix(file, ".apk") {
@@ -58,6 +58,9 @@ func (c *counted) Read(p []byte) (int, error) {
 
 	return n, err //nolint:wrapcheck // the reader's own
 }
+
+// maxSegment bounds what one segment of a package unpacks to.
+const maxSegment = 64 << 30
 
 // segment is one gzip member of an .apk: where it starts and ends.
 type segment struct{ start, end int64 }
@@ -92,7 +95,7 @@ func apkSegments(r io.ReaderAt, size int64, fn func(i int, body io.Reader) error
 		}
 
 		// What the tar left unread belongs to the member still.
-		if _, err := io.Copy(io.Discard, z); err != nil {
+		if _, err := io.Copy(io.Discard, io.LimitReader(z, maxSegment)); err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrFormat, err)
 		}
 

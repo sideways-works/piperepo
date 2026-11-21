@@ -28,7 +28,7 @@ const pacmanConf = `printf "[options]\nArchitecture = auto\nSigLevel = Required 
 func TestPacmanInstallsFromTheSignedRepository(t *testing.T) {
 	podman(t)
 
-	s := serve(t, "arch", 2)
+	s := serve(t, "arch")
 	dir := workdir(t)
 
 	inside(t, imageArch, dir, "useradd -m builder\n"+fmt.Sprintf(archBuild, "demo", "1.0.0")+fmt.Sprintf(archBuild, "other", "2.0.0"))
@@ -37,6 +37,7 @@ func TestPacmanInstallsFromTheSignedRepository(t *testing.T) {
 	fetch(t, s.urls[0], "key.asc", dir, "key.asc")
 	otherKey(t, dir)
 
+	listed(t, s.urls[1], "1.0.0-1")
 	hp := hostport(s.urls[1])
 	trust := `pacman-key --init >/dev/null 2>&1
 pacman-key --add /w/%[1]s

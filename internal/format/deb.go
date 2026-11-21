@@ -38,7 +38,7 @@ func newDeb(o Options, pgp *sign.OpenPGP) *deb {
 	return &deb{o: o, pgp: pgp}
 }
 
-func (d *deb) Name() string { return "apt" }
+func (d *deb) Name() string { return Apt }
 
 func (d *deb) Accept(file string) error {
 	if !strings.HasSuffix(file, ".deb") {
@@ -241,7 +241,7 @@ func (d *deb) Keys() (map[string][]byte, error) {
 		return nil, err
 	}
 
-	return map[string][]byte{"key.asc": k}, nil
+	return map[string][]byte{keyFile: k}, nil
 }
 
 func (d *deb) Immutable(p string) bool { return strings.Contains(p, "/by-hash/") }
@@ -249,9 +249,38 @@ func (d *deb) Immutable(p string) bool { return strings.Contains(p, "/by-hash/")
 // debSkip are control fields apt's Packages writes itself.
 var debSkip = []string{"Filename", "Size", "MD5sum", "SHA1", "SHA256"}
 
+// debFile is an index file Release names, by its path under the suite.
+type debFile struct {
+	name string
+	data []byte
+}
+
 func (d *deb) Index(pkgs []*meta.Package, at time.Time) (map[string][]byte, error) {
 	out := map[string][]byte{}
 	dist := path.Join("dists", d.o.Suite)
+	sums := d.packagesFiles(pkgs, dist, out)
+	release := d.release(sums, at)
+
+	in, err := d.pgp.ClearSign(release)
+	if err != nil {
+		return nil, err
+	}
+
+	det, err := d.pgp.Detach(release, true)
+	if err != nil {
+		return nil, err
+	}
+
+	out[path.Join(dist, "Release")] = release
+	out[path.Join(dist, "InRelease")] = in
+	out[path.Join(dist, "Release.gpg")] = det
+
+	return out, nil
+}
+
+// packagesFiles writes each architecture's Packages files into out, by
+// their names and by their hashes, and answers them for Release.
+func (d *deb) packagesFiles(pkgs []*meta.Package, dist string, out map[string][]byte) []debFile {
 	byArch := map[string]*bytes.Buffer{}
 
 	for _, a := range d.o.Archs {
@@ -275,18 +304,13 @@ func (d *deb) Index(pkgs []*meta.Package, at time.Time) (map[string][]byte, erro
 		}
 	}
 
-	type sum struct {
-		name string
-		data []byte
-	}
-
-	var sums []sum
+	sums := make([]debFile, 0, 2*len(d.o.Archs))
 
 	for _, a := range d.o.Archs {
 		dir := path.Join(d.o.Component, "binary-"+a)
 		plain := byArch[a].Bytes()
 
-		for _, f := range []sum{{path.Join(dir, "Packages"), plain}, {path.Join(dir, "Packages.gz"), gz(plain)}} {
+		for _, f := range []debFile{{path.Join(dir, "Packages"), plain}, {path.Join(dir, "Packages.gz"), gz(plain)}} {
 			sums = append(sums, f)
 			out[path.Join(dist, f.name)] = f.data
 			h := sha256.Sum256(f.data)
@@ -296,6 +320,11 @@ func (d *deb) Index(pkgs []*meta.Package, at time.Time) (map[string][]byte, erro
 		}
 	}
 
+	return sums
+}
+
+// release is the suite's Release file over its index files.
+func (d *deb) release(sums []debFile, at time.Time) []byte {
 	var rel bytes.Buffer
 
 	fmt.Fprintf(&rel, "Origin: %s\nLabel: %s\nSuite: %s\nCodename: %s\nDate: %s\n", d.o.Origin, d.o.Origin, d.o.Suite, d.o.Suite, at.UTC().Format(time.RFC1123))
@@ -315,21 +344,5 @@ func (d *deb) Index(pkgs []*meta.Package, at time.Time) (map[string][]byte, erro
 		fmt.Fprintf(&rel, " %s %d %s\n", hex.EncodeToString(h[:]), len(s.data), s.name)
 	}
 
-	release := rel.Bytes()
-
-	in, err := d.pgp.ClearSign(release)
-	if err != nil {
-		return nil, err
-	}
-
-	det, err := d.pgp.Detach(release, true)
-	if err != nil {
-		return nil, err
-	}
-
-	out[path.Join(dist, "Release")] = release
-	out[path.Join(dist, "InRelease")] = in
-	out[path.Join(dist, "Release.gpg")] = det
-
-	return out, nil
+	return rel.Bytes()
 }

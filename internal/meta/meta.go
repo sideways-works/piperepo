@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -139,7 +140,7 @@ func (p *Package) Check() error {
 	return nil
 }
 
-// Entry is a package as the API lists it.
+// Entry is a package as an index generation lists it.
 type Entry struct {
 	Name        string    `json:"name"`
 	Version     string    `json:"version"`
@@ -150,30 +151,139 @@ type Entry struct {
 	SHA256      string    `json:"sha256"`
 	Description string    `json:"description"`
 	License     string    `json:"license"`
-	URL         string    `json:"url"`
-	Depends     []string  `json:"depends"`
 	Uploaded    time.Time `json:"uploaded"`
-	Files       []File    `json:"files,omitempty"`
 }
 
-// EntryOf is p as the API lists it, served at path.
-func EntryOf(p *Package, path string, files bool) Entry {
-	e := Entry{
+// EntryOf is p as a generation lists it, served at path.
+func EntryOf(p *Package, path string) Entry {
+	return Entry{
 		Name: p.Name, Version: p.Version, Arch: p.Arch, File: p.File, Path: path, Size: p.Size, SHA256: p.SHA256,
-		Description: p.Description, License: p.License, URL: p.URL, Depends: p.Depends, Uploaded: p.Uploaded,
+		Description: p.Description, License: p.License, Uploaded: p.Uploaded,
 	}
-	if e.Depends == nil {
-		e.Depends = []string{}
-	}
+}
 
-	if files {
-		e.Files = p.Files
-		if e.Files == nil {
-			e.Files = []File{}
+// Listed is a package as GET /api/packages lists it.
+type Listed struct {
+	Name        string    `json:"name"`
+	Version     string    `json:"version"`
+	Arch        string    `json:"arch"`
+	File        string    `json:"file"`
+	Size        int64     `json:"size"`
+	SHA256      string    `json:"sha256"`
+	Description string    `json:"description"`
+	License     string    `json:"license"`
+	Uploaded    time.Time `json:"uploaded"`
+}
+
+// ListedOf is an entry as the API lists it.
+func ListedOf(e Entry) Listed {
+	return Listed{
+		Name: e.Name, Version: e.Version, Arch: e.Arch, File: e.File, Size: e.Size, SHA256: e.SHA256,
+		Description: e.Description, License: e.License, Uploaded: e.Uploaded,
+	}
+}
+
+// Version is one version of a package, as GET /api/packages/<name>/<version>
+// answers: every architecture it is in, the first one's files.
+type Version struct {
+	Name        string     `json:"name"`
+	Version     string     `json:"version"`
+	Archs       []string   `json:"archs"`
+	Description string     `json:"description"`
+	License     string     `json:"license"`
+	Size        int64      `json:"size"`
+	Depends     []Relation `json:"depends"`
+	Files       []File     `json:"files"`
+}
+
+// Relation is a dependency: a name, and the versions it takes as written.
+type Relation struct {
+	Name  string `json:"name"`
+	Range string `json:"range"`
+}
+
+// rpmOps are rpm's comparison flags as written.
+var rpmOps = map[string]string{"LT": "<", "GT": ">", "EQ": "=", "LE": "<=", "GE": ">="}
+
+// Relations are p's dependencies, each split into its name and range.
+func (p *Package) Relations() []Relation {
+	out := []Relation{}
+
+	if p.RPM != nil {
+		for _, d := range p.RPM.Requires {
+			if !strings.HasPrefix(d.Name, "rpmlib(") {
+				out = append(out, Relation{Name: d.Name, Range: rpmRange(d)})
+			}
 		}
+
+		return out
 	}
 
-	return e
+	for _, d := range p.Depends {
+		out = append(out, relationOf(d))
+	}
+
+	return out
+}
+
+// rpmRange is an rpm relation's range as written: "<= 1:2.0-3".
+func rpmRange(d Dep) string {
+	op, ok := rpmOps[d.Flags]
+	if !ok {
+		return ""
+	}
+
+	v := d.Ver
+	if d.Epoch != "" && d.Epoch != "0" {
+		v = d.Epoch + ":" + v
+	}
+
+	if d.Rel != "" {
+		v += "-" + d.Rel
+	}
+
+	return op + " " + v
+}
+
+// relationOf splits "name (>= 1.0)", as apt writes it, or "name>=1.0", as
+// pacman and apk do.
+func relationOf(d string) Relation {
+	d = strings.TrimSpace(d)
+
+	// Alternatives stay whole: no one range is theirs.
+	if strings.Contains(d, "|") {
+		return Relation{Name: d}
+	}
+
+	if name, rest, ok := strings.Cut(d, "("); ok {
+		return Relation{Name: strings.TrimSpace(name), Range: strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rest), ")"))}
+	}
+
+	if i := strings.IndexAny(d, "<>=~"); i > 0 {
+		return Relation{Name: d[:i], Range: d[i:]}
+	}
+
+	return Relation{Name: d}
+}
+
+// VersionOf is the answer for a version given its packages, each
+// architecture's, the first one first.
+func VersionOf(pkgs []*Package) Version {
+	first := pkgs[0]
+	v := Version{
+		Name: first.Name, Version: first.Version, Description: first.Description, License: first.License,
+		Size: first.Size, Depends: first.Relations(), Files: first.Files,
+	}
+
+	for _, p := range pkgs {
+		v.Archs = append(v.Archs, p.Arch)
+	}
+
+	if v.Files == nil {
+		v.Files = []File{}
+	}
+
+	return v
 }
 
 // Marshal is p as its meta object holds it.

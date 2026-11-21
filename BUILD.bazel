@@ -1,0 +1,22 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/sideways-works/piperepo
+gazelle(name = "gazelle")
+
+# The lint every commit passes: go vet and golangci-lint.
+alias(
+    name = "lint",
+    actual = "//tools/lint",
+)
+
+# Points git at the repository's hooks.
+alias(
+    name = "hooks",
+    actual = "//tools/hooks",
+)
+
+# The commit-msg hook's check.
+alias(
+    name = "commit-msg",
+    actual = "//tools/hooks",
+)

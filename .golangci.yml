@@ -69,6 +69,8 @@ linters:
         - empty
         - stdlib
         - generic
+        # New answers the format a name picks.
+        - github.com/sideways-works/piperepo/internal/format.Format
     funlen:
       # wsl_v5 puts a blank line around most blocks, so a line count measures
       # spacing as much as size; the statement count measures what the

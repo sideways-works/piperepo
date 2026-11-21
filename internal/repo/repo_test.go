@@ -20,7 +20,7 @@ import (
 	"github.com/sideways-works/piperepo/internal/testpkg"
 )
 
-var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
+var quiet = slog.New(slog.DiscardHandler)
 
 // instance is one piperepo instance's repository over s.
 func instance(t *testing.T, s store.Store) *Repo {
@@ -108,7 +108,9 @@ func TestAnUploadIsListedAndServed(t *testing.T) {
 		t.Fatalf("the package: %+v %v %v", o, index, err)
 	}
 
-	_ = body.Close()
+	if err := body.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, _, _, err := r.Open(t.Context(), "pool/main/n/none/none.deb"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("a path no one uploaded: %v", err)
@@ -146,7 +148,11 @@ func TestOverwriteTakesOtherBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tr, _ := r.tree(t.Context(), true)
+	tr, err := r.tree(t.Context(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if len(tr.Entries) != 1 || tr.Entries[0].SHA256 != p.SHA256 {
 		t.Fatalf("the index lists %+v", tr.Entries)
 	}
@@ -236,8 +242,8 @@ func TestAnotherInstanceFinishesAnUploadItsInstanceDiedIn(t *testing.T) {
 
 	func() {
 		defer func() {
-			if v := recover(); v != errDied { //nolint:errorlint // the value panicked with
-				t.Fatalf("the upload ended with %v", v)
+			if err, _ := recover().(error); !errors.Is(err, errDied) { //nolint:errcheck // a panic of anything else fails too
+				t.Fatalf("the upload ended with %v", err)
 			}
 		}()
 
@@ -277,12 +283,20 @@ func TestEveryMetaObjectLostStillRebuildsFromTheBucket(t *testing.T) {
 
 	before := packagesFile(t, a)
 
-	metas, _ := s.List(t.Context(), MetaPrefix)
-	for _, m := range metas {
-		_ = s.Delete(t.Context(), m.Key)
+	metas, err := s.List(t.Context(), MetaPrefix)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	_ = s.Delete(t.Context(), PointerKey)
+	for _, m := range metas {
+		if err := s.Delete(t.Context(), m.Key); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := s.Delete(t.Context(), PointerKey); err != nil {
+		t.Fatal(err)
+	}
 
 	b := instance(t, s)
 	if err := b.Reconcile(t.Context()); err != nil {
@@ -297,7 +311,7 @@ func TestEveryMetaObjectLostStillRebuildsFromTheBucket(t *testing.T) {
 		t.Fatalf("the rebuilt Packages differs:\n%s\n---\n%s", before, after)
 	}
 
-	if again, _ := s.List(t.Context(), MetaPrefix); len(again) != 3 {
+	if again, err := s.List(t.Context(), MetaPrefix); err != nil || len(again) != 3 {
 		t.Fatalf("%d meta objects made again", len(again))
 	}
 }
@@ -315,11 +329,15 @@ func TestReplacedGenerationsGoAfterTheGrace(t *testing.T) {
 
 	r.gcAt.Store(0)
 
-	p, _ := r.pointer(t.Context(), true)
+	p, err := r.pointer(t.Context(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	r.collect(t.Context(), p.Gen)
 
-	gens, _ := s.Prefixes(t.Context(), IndexPrefix)
-	if len(gens) != 1 || gens[0] != IndexPrefix+p.Gen+"/" {
+	gens, err := s.Prefixes(t.Context(), IndexPrefix)
+	if err != nil || len(gens) != 1 || gens[0] != IndexPrefix+p.Gen+"/" {
 		t.Fatalf("generations left: %v, served %s", gens, p.Gen)
 	}
 

@@ -26,7 +26,7 @@ type rpm struct {
 
 func newRPM(o Options, pgp *sign.OpenPGP) *rpm { return &rpm{o: o, pgp: pgp} }
 
-func (r *rpm) Name() string { return "rpm" }
+func (r *rpm) Name() string { return RPM }
 
 func (r *rpm) Accept(file string) error {
 	if !strings.HasSuffix(file, ".rpm") || strings.HasSuffix(file, ".src.rpm") {
@@ -380,7 +380,7 @@ func (r *rpm) Keys() (map[string][]byte, error) {
 		return nil, err
 	}
 
-	return map[string][]byte{"key.asc": k, "repodata/repomd.xml.key": k}, nil
+	return map[string][]byte{keyFile: k, "repodata/repomd.xml.key": k}, nil
 }
 
 func (r *rpm) Immutable(p string) bool {

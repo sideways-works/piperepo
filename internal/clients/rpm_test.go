@@ -25,7 +25,7 @@ const dnfRepo = `printf "[piperepo]\nname=piperepo\nbaseurl=http://%s/\nusername
 func TestDnfInstallsFromTheSignedRepository(t *testing.T) {
 	podman(t)
 
-	s := serve(t, "rpm", 2)
+	s := serve(t, "rpm")
 	dir := workdir(t)
 
 	inside(t, imageFedora, dir, "dnf -q -y install rpm-build >/dev/null\n"+fmt.Sprintf(rpmBuild, "demo", "1.0.0")+fmt.Sprintf(rpmBuild, "other", "2.0.0"))
@@ -33,6 +33,7 @@ func TestDnfInstallsFromTheSignedRepository(t *testing.T) {
 	upload(t, s.urls[1], dir, "other-2.0.0-1.noarch.rpm")
 	fetch(t, s.urls[0], "key.asc", dir, "key.asc")
 
+	listed(t, s.urls[1], "1.0.0-1")
 	hp := hostport(s.urls[1])
 	out := inside(t, imageFedora, dir, fmt.Sprintf(dnfRepo, hp, token, "/w/key.asc")+`
 dnf -y --disablerepo='*' --enablerepo=piperepo install demo other

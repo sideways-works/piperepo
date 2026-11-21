@@ -33,7 +33,7 @@ echo "http://piperun:%s@%s" > /etc/apk/repositories
 func TestApkInstallsFromTheSignedRepository(t *testing.T) {
 	podman(t)
 
-	s := serve(t, "apk", 2)
+	s := serve(t, "apk")
 	dir := workdir(t)
 
 	out := inside(t, imageAlpine, dir, "apk --version\napk add -q abuild >/dev/null\nabuild-keygen -a -n >/dev/null 2>&1\n"+fmt.Sprintf(apkBuild, "demo", "1.0.0")+fmt.Sprintf(apkBuild, "other", "2.0.0"))
@@ -42,6 +42,7 @@ func TestApkInstallsFromTheSignedRepository(t *testing.T) {
 	upload(t, s.urls[1], dir, "other-2.0.0-r0.apk")
 	fetch(t, s.urls[0], "keys/piperun.rsa.pub", dir, "piperun.rsa.pub")
 
+	listed(t, s.urls[1], "1.0.0-r0")
 	hp := hostport(s.urls[1])
 
 	out = inside(t, imageAlpine, dir, fmt.Sprintf(apkRepo, "piperun.rsa.pub", token, hp)+`apk update

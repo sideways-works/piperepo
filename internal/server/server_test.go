@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +37,7 @@ func start(t *testing.T) *httptest.Server {
 		t.Fatal(err)
 	}
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	r := &repo.Repo{Store: store.NewMemory(), Format: f, Grace: time.Hour, PointerTTL: time.Second, TempDir: t.TempDir(), Log: log}
 
 	s, err := New(r, []byte(token), log)
@@ -48,7 +51,13 @@ func start(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func do(t *testing.T, srv *httptest.Server, method, path string, body []byte, auth func(*http.Request)) (*http.Response, []byte) {
+// answer is a response's status and headers, its body read and closed.
+type answer struct {
+	StatusCode int
+	Header     http.Header
+}
+
+func do(t *testing.T, srv *httptest.Server, method, path string, body []byte, auth func(*http.Request)) (answer, []byte) {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(t.Context(), method, srv.URL+path, bytes.NewReader(body))
@@ -66,9 +75,12 @@ func do(t *testing.T, srv *httptest.Server, method, path string, body []byte, au
 	}
 	defer resp.Body.Close()
 
-	b, _ := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	return resp, b
+	return answer{StatusCode: resp.StatusCode, Header: resp.Header}, b
 }
 
 func basic(r *http.Request)  { r.SetBasicAuth("piperun", token) }
@@ -107,7 +119,8 @@ func TestAnUploadIsListedAndItsTreeServed(t *testing.T) {
 		t.Fatalf("the upload: %d %s", resp.StatusCode, body)
 	}
 
-	if resp.Header.Get("Piperepo-Name") != "demo" || resp.Header.Get("Piperepo-Version") != "1.0" || resp.Header.Get("Piperepo-Arch") != "all" {
+	if resp.Header.Get("Piperepo-Name") != "demo" || resp.Header.Get("Piperepo-Version") != "1.0" || resp.Header.Get("Piperepo-Arch") != "all" ||
+		resp.Header.Get("Piperepo-Size") != strconv.Itoa(len(testpkg.Deb("demo", "1.0", "all"))) {
 		t.Fatalf("the upload's headers: %v", resp.Header)
 	}
 
@@ -121,16 +134,29 @@ func TestAnUploadIsListedAndItsTreeServed(t *testing.T) {
 
 	_, body = do(t, srv, http.MethodGet, "/api/packages?name=demo", nil, basic)
 
-	var list []meta.Entry
-	if err := json.Unmarshal(body, &list); err != nil || len(list) != 1 || list[0].Path != "pool/main/d/demo/demo_1.0_all.deb" || list[0].License != "MIT" {
+	var list []map[string]any
+	if err := json.Unmarshal(body, &list); err != nil || len(list) != 1 {
 		t.Fatalf("the list: %s %v", body, err)
+	}
+
+	keys := slices.Sorted(maps.Keys(list[0]))
+	if want := []string{"arch", "description", "file", "license", "name", "sha256", "size", "uploaded", "version"}; !slices.Equal(keys, want) {
+		t.Fatalf("a listed package's fields: %v, not %v", keys, want)
+	}
+
+	if list[0]["license"] != "MIT" || list[0]["file"] != "demo_1.0_all.deb" {
+		t.Fatalf("the list: %s", body)
 	}
 
 	_, body = do(t, srv, http.MethodGet, "/api/packages/demo/1.0", nil, basic)
 
-	var detail []meta.Entry
-	if err := json.Unmarshal(body, &detail); err != nil || len(detail) != 1 || len(detail[0].Files) == 0 {
+	var detail meta.Version
+	if err := json.Unmarshal(body, &detail); err != nil || detail.Name != "demo" || !slices.Equal(detail.Archs, []string{"all"}) || len(detail.Files) == 0 {
 		t.Fatalf("the version: %s %v", body, err)
+	}
+
+	if want := []meta.Relation{{Name: "libc6", Range: ">= 2.36"}, {Name: "zlib1g", Range: ""}}; !slices.Equal(detail.Depends, want) {
+		t.Fatalf("depends %+v", detail.Depends)
 	}
 
 	if resp, _ := do(t, srv, http.MethodGet, "/api/packages/demo/9.9", nil, basic); resp.StatusCode != http.StatusNotFound {

@@ -172,7 +172,7 @@ func signerOf(name string, c *config.Config) (format.Signer, error) {
 	if err != nil {
 		return format.Signer{}, fmt.Errorf("key_file: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck // read only
 
 	k, err := sign.OpenPGPFromArmored(f)
 

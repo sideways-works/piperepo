@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -43,7 +44,7 @@ func New(r *repo.Repo, token []byte, log *slog.Logger) (*Server, error) {
 // Handler routes every request.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok\n") })
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok\n") }) //nolint:errcheck // the client went away
 	mux.Handle("PUT /upload/{file}", s.auth(http.HandlerFunc(s.upload)))
 	mux.Handle("GET /api/packages", s.auth(http.HandlerFunc(s.list)))
 	mux.Handle("GET /api/packages/{name}/{version}", s.auth(http.HandlerFunc(s.version)))
@@ -106,7 +107,8 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Piperepo-Name", p.Name)
 		w.Header().Set("Piperepo-Version", p.Version)
 		w.Header().Set("Piperepo-Arch", p.Arch)
-		writeJSON(w, http.StatusCreated, meta.EntryOf(p, s.Repo.Format.Paths(p)[0], false))
+		w.Header().Set("Piperepo-Size", strconv.FormatInt(p.Size, 10))
+		writeJSON(w, http.StatusCreated, meta.ListedOf(meta.EntryOf(p, s.Repo.Format.Paths(p)[0])))
 	}
 }
 
@@ -133,11 +135,11 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := r.URL.Query().Get("name")
-	out := []meta.Entry{}
+	out := []meta.Listed{}
 
 	for _, e := range t.Entries {
 		if name == "" || e.Name == name {
-			out = append(out, e)
+			out = append(out, meta.ListedOf(e))
 		}
 	}
 
@@ -151,29 +153,37 @@ func (s *Server) version(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name, version := r.PathValue("name"), r.PathValue("version")
-	out := []meta.Entry{}
+
+	var entries []meta.Entry
 
 	for _, e := range t.Entries {
-		if e.Name != name || e.Version != version {
-			continue
+		if e.Name == name && e.Version == version {
+			entries = append(entries, e)
 		}
-
-		p, err := s.Repo.Meta(r.Context(), e.File)
-		if err != nil {
-			s.Log.Warn("meta object not read", "file", e.File, "err", err)
-			out = append(out, e)
-
-			continue
-		}
-
-		out = append(out, meta.EntryOf(p, e.Path, true))
 	}
 
-	if len(out) == 0 {
+	if len(entries) == 0 {
 		problem(w, http.StatusNotFound, "no "+name+" "+version+" here")
 
 		return
 	}
+
+	slices.SortFunc(entries, func(a, b meta.Entry) int { return strings.Compare(a.Arch, b.Arch) })
+
+	pkgs := make([]*meta.Package, 0, len(entries))
+
+	for _, e := range entries {
+		p, err := s.Repo.Meta(r.Context(), e.File)
+		if err != nil {
+			s.Log.Warn("meta object not read", "file", e.File, "err", err)
+
+			p = &meta.Package{Name: e.Name, Version: e.Version, Arch: e.Arch, Size: e.Size, Description: e.Description, License: e.License}
+		}
+
+		pkgs = append(pkgs, p)
+	}
+
+	out := meta.VersionOf(pkgs)
 
 	writeJSON(w, http.StatusOK, out)
 }

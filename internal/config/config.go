@@ -73,7 +73,7 @@ var ErrConfig = errors.New("config")
 
 // Load reads a configuration file; an unknown key is refused.
 func Load(path string) (*Config, error) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) //nolint:gosec // the file the command line names
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrConfig, err)
 	}
@@ -122,7 +122,7 @@ func Parse(b []byte) (*Config, error) {
 
 // Secret reads a file holding one secret, without its trailing newline.
 func Secret(path string) ([]byte, error) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) //nolint:gosec // a file the configuration names
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrConfig, err)
 	}

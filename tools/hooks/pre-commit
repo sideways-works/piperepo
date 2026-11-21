@@ -1,0 +1,3 @@
+#!/bin/sh
+# git runs this file; the lint is //:lint. Installed by bazel run //:hooks.
+exec bazel run --noshow_progress --ui_event_filters=-info,-stderr //:lint
