@@ -1,3 +1,5 @@
+<img src="docs/brand/mark.svg" alt="piperepo" width="96">
+
 # piperepo
 
 piperepo serves one signed package repository from S3. Each instance
