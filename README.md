@@ -1,4 +1,4 @@
-<img src="docs/brand/mark.svg" alt="piperepo" width="96">
+<img src="docs/brand/banner.svg" alt="piperepo, by Sideways Works" width="400">
 
 # piperepo
 
