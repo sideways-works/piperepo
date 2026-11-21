@@ -23,6 +23,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/sideways-works/piperepo/internal/sign"
 )
 
 // The images the tests pin, each at its latest release.
@@ -290,6 +292,25 @@ func workdir(t *testing.T) string {
 	}
 
 	return dir
+}
+
+// otherKey writes another store's public key into dir as other.asc.
+func otherKey(t *testing.T, dir string) {
+	t.Helper()
+
+	k, err := sign.OpenPGPFromSeed([]byte("another store's seed, not this one's"), "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pub, err := k.PublicArmored()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "other.asc"), pub, 0o644); err != nil { //nolint:gosec // read by the client container
+		t.Fatal(err)
+	}
 }
 
 // hostport is an instance's address without its scheme.

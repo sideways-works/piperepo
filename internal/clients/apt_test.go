@@ -43,9 +43,16 @@ cat /usr/share/demo/who /usr/share/other/who
 	}
 
 	// Another key: apt refuses the repository.
-	inside(t, imageDebian, dir, `echo "deb [signed-by=/usr/share/keyrings/debian-archive-keyring.pgp] http://`+hp+` stable main" > /etc/apt/sources.list.d/piperepo.list
+	otherKey(t, dir)
+	refused := inside(t, imageDebian, dir, `echo "deb [signed-by=/w/other.asc] http://`+hp+` stable main" > /etc/apt/sources.list.d/piperepo.list
 printf 'machine http://`+hp+` login piperun password %s\n' "`+token+`" > /etc/apt/auth.conf.d/piperepo.conf
 chmod 644 /etc/apt/auth.conf.d/piperepo.conf
-if apt-get -o APT::Update::Error-Mode=any update; then echo "apt took another key" >&2; exit 1; fi
+if apt-get -o APT::Update::Error-Mode=any update 2>&1; then echo "apt took another key" >&2; exit 1; fi
 `)
+
+	if !strings.Contains(refused, "NO_PUBKEY") && !strings.Contains(refused, "not signed") {
+		t.Fatalf("apt refused, but not for the signature:\n%s", refused)
+	}
+
+	t.Logf("with another key apt says:\n%s", refused)
 }
