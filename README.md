@@ -118,3 +118,8 @@ pacman and apk, each checking the signature. They also show that each
 client refuses another key. `bazel run //:hooks` points git at the
 repository's hooks: the lint before each commit, and a one-line
 conventional subject.
+
+## License
+
+piperepo is licensed under the [GNU Affero General Public License, version
+3](LICENSE) or (at your option) any later version.
