@@ -236,4 +236,4 @@ and the tests first.
 ## License
 
 piperepo is licensed under the [GNU Affero General Public License, version
-3](LICENSE) or (at your option) any later version.
+3](LICENSE).
